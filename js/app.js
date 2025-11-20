@@ -4,37 +4,6 @@
     ? cb()
     : document.addEventListener('DOMContentLoaded', cb);
 
-  const updateThemeIcon = (theme) => {
-    const icon = document.querySelector('[data-theme-toggle] i');
-    if (!icon) return;
-    icon.classList.toggle('fa-sun', theme === 'dark');
-    icon.classList.toggle('fa-moon', theme !== 'dark');
-  };
-
-  const toggleTheme = () => {
-    const root = document.documentElement;
-    const current = root.getAttribute('data-theme') || 'light';
-    const next = current === 'light' ? 'dark' : 'light';
-    root.setAttribute('data-theme', next);
-    localStorage.setItem('restanet-theme', next);
-    updateThemeIcon(next);
-  };
-
-  const applyStoredTheme = () => {
-    const stored = localStorage.getItem('restanet-theme');
-    const theme = stored === 'dark' ? 'dark' : 'light';
-    document.documentElement.setAttribute('data-theme', theme);
-    updateThemeIcon(theme);
-  };
-
-  const initThemeToggle = () => {
-    applyStoredTheme();
-    const btn = document.querySelector('[data-theme-toggle]');
-    if (btn) {
-      btn.addEventListener('click', toggleTheme);
-    }
-  };
-
   const initDataTables = () => {
     if (typeof DataTable === 'undefined') return;
     document.querySelectorAll('table.datatable').forEach((tbl) => {
@@ -161,7 +130,6 @@
   };
 
   ready(() => {
-    initThemeToggle();
     initDataTables();
     initCheckoutGuard();
     initInactivityWatcher();
