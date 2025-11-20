@@ -15,7 +15,15 @@ define('BASE_URL', (isset($_SERVER['HTTP_HOST'])
 	: '') . BASE_PATH);
 
 define('ITEMS_PER_PAGE', 10);
-// Autoload composer para librerías externas (QR, Dompdf, PHPMailer)
+
+if (!defined('SESSION_TIMEOUT')) {
+    $envTimeout = getenv('RESTANET_SESSION_TIMEOUT');
+    define('SESSION_TIMEOUT', ($envTimeout !== false ? max(300, (int) $envTimeout) : 600)); // 10 min por defecto
+}
+if (!defined('SESSION_TIMEOUT_GRACE')) {
+    define('SESSION_TIMEOUT_GRACE', 120); // ventana de gracia opcional en segundos
+}
+
 $autoloadPath = __DIR__ . '/../vendor/autoload.php';
 if (file_exists($autoloadPath)) {
 	require_once $autoloadPath;

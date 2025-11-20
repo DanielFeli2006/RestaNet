@@ -32,9 +32,13 @@
   <div class="col-12 col-lg-4">
     <div class="card shadow-soft h-100">
       <div class="card-body">
-        <div class="fw-semibold mb-2"><i class="fa-solid fa-table me-1"></i>Gestión de mesas</div>
-        <!-- TODO: AGREGAR IMAGEN - Plano de mesas del salón -->
-        <p class="small text-muted mb-0">Próximamente: asignación y estado en tiempo real.</p>
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <div class="fw-semibold"><i class="fa-solid fa-table me-2"></i>Gestión de mesas</div>
+          <span class="badge bg-info-subtle text-info-emphasis small">Actualiza cada 15 s</span>
+        </div>
+        <div class="mesa-grid" data-mesas-grid>
+          <p class="text-muted small">Cargando estado de mesas…</p>
+        </div>
       </div>
     </div>
   </div>

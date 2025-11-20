@@ -47,16 +47,27 @@ function start_secure_session(): void {
         session_start();
     }
     // Enforce inactivity timeout
-    $timeout = defined('SESSION_TIMEOUT') ? (int)SESSION_TIMEOUT : 1800; // 30min
+    $timeout = defined('SESSION_TIMEOUT') ? max(120, (int) SESSION_TIMEOUT) : 600; // 10min
+    $grace = defined('SESSION_TIMEOUT_GRACE') ? max(0, (int) SESSION_TIMEOUT_GRACE) : 0;
+    $now = time();
     $last = $_SESSION['last_activity'] ?? null;
-    if ($last !== null && (time() - $last) > $timeout) {
-        // destruir sesión por inactividad
-        session_unset();
-        session_destroy();
-        // iniciar una nueva sesión limpia
-        session_start();
+
+    if ($last !== null) {
+        $idle = $now - $last;
+
+        if ($idle > $timeout + $grace) {
+            session_unset();
+            session_destroy();
+            session_start();
+            $_SESSION['timed_out'] = true;
+        } elseif ($idle > $timeout) {
+            $_SESSION['timeout_warning'] = $timeout + $grace - $idle;
+        } else {
+            unset($_SESSION['timeout_warning'], $_SESSION['timed_out']);
+        }
     }
-    $_SESSION['last_activity'] = time();
+
+    $_SESSION['last_activity'] = $now;
 }
 
 function is_logged_in(): bool {

@@ -28,6 +28,16 @@ header("Content-Security-Policy: default-src 'self' https:; script-src 'self' ht
   </style>
   <!-- App styles -->
   <link rel="stylesheet" href="<?php echo BASE_PATH; ?>css/style.css">
+  <!-- views/layout/cabezote.php (fragmento nuevo en <head> y navbar) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <script>
+    window.restanetConfig = {
+      baseUrl: '<?php echo BASE_PATH; ?>',
+      sessionTimeout: <?php echo defined('SESSION_TIMEOUT') ? (int) SESSION_TIMEOUT : 600; ?>,
+      sessionGrace: <?php echo defined('SESSION_TIMEOUT_GRACE') ? (int) SESSION_TIMEOUT_GRACE : 0; ?>
+    };
+  </script>
 </head>
 <body>
 <header class="mb-3 shadow-sm">
@@ -70,4 +80,9 @@ header("Content-Security-Policy: default-src 'self' https:; script-src 'self' ht
     </div>
   </nav>
 </header>
+<?php if (is_logged_in()): ?>
+  <button class="theme-toggle theme-toggle-fab" type="button" data-theme-toggle aria-label="Cambiar tema">
+    <i class="fa-solid fa-moon"></i>
+  </button>
+<?php endif; ?>
 <main class="container py-4">

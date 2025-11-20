@@ -85,5 +85,22 @@ if ($action === 'logout') {
     exit;
 }
 
+if ($action === 'heartbeat') {
+    header('Content-Type: application/json');
+    start_secure_session();
+    if (!is_logged_in()) {
+        http_response_code(401);
+        echo json_encode(['ok' => false]);
+        exit;
+    }
+    $_SESSION['last_activity'] = time();
+    echo json_encode([
+        'ok' => true,
+        'warning' => $_SESSION['timeout_warning'] ?? null,
+        'timedOut' => $_SESSION['timed_out'] ?? false,
+    ]);
+    exit;
+}
+
 http_response_code(400);
 echo 'Acción no soportada';
