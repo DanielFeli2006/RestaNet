@@ -1,0 +1,77 @@
+:root{
+	--brand-green: #2bb673;   /* verde accesible */
+	--brand-blue:  #3a7bd5;   /* azul suave */
+	--brand-purple:#7b5bd6;   /* morado suave */
+	--brand-dark:  #1f2230;
+	--bg-soft:     #f7f8fb;
+	--text-main:   #2a2e3f;
+}
+
+html,body{height:100%;}
+body{
+	font-family: 'Inter', Arial, sans-serif;
+	margin:0; padding:0;
+
+/* Ajuste para asegurar que los íconos Font Awesome se muestren con el peso correcto */
+[class^="fa-"], [class*=" fa-"] {
+	font-family: 'Font Awesome 6 Free';
+	font-weight: 900; /* sólido por defecto */
+}
+.fa-regular { font-weight:400; }
+.fa-brands { font-family: 'Font Awesome 6 Brands'; font-weight:400; }
+
+/* Si los íconos no cargan, mostrar un cuadrado neutro para detectar fallo */
+.fa:before { display:inline-block; }
+	color:var(--text-main);
+	background: var(--bg-soft);
+}
+
+/* Gradientes suaves entre verde, azul y morado */
+.gradient-navbar{
+	background: linear-gradient(90deg, var(--brand-green) 0%, var(--brand-blue) 50%, var(--brand-purple) 100%);
+}
+.gradient-footer{
+	background: linear-gradient(90deg, var(--brand-purple) 0%, var(--brand-blue) 50%, var(--brand-green) 100%);
+}
+
+h1,h2,h3{color: var(--brand-dark);} 
+
+/* Tarjetas y contenedores */
+.card{
+	border: 1px solid rgba(0,0,0,0.06);
+	border-radius: 12px;
+}
+
+/* Botones personalizados inspirados en la paleta */
+.btn-brand{
+	color:#fff; border:none;
+	background: linear-gradient(135deg, var(--brand-green), var(--brand-blue));
+}
+.btn-brand:hover{
+	filter: brightness(1.03);
+}
+.btn-accent{
+	color:#fff; border:none;
+	background: linear-gradient(135deg, var(--brand-blue), var(--brand-purple));
+}
+
+/* Tablas Bootstrap tuning */
+.table thead th{
+	background: linear-gradient(90deg, #f0f6ff, #f7f4ff);
+	color: var(--brand-dark);
+	border-bottom: 2px solid rgba(0,0,0,0.08);
+}
+.table tbody tr:hover{
+	background: #f8fbff;
+}
+
+/* Formularios */
+.form-label{font-weight:600;}
+.form-control:focus{
+	border-color: var(--brand-blue);
+	box-shadow: 0 0 0 .2rem rgba(58,123,213,.15);
+}
+
+/* Utilidades */
+.shadow-soft{box-shadow: 0 6px 24px rgba(31,34,48,.06);} 
+.badge-rol{background: var(--brand-purple);}
