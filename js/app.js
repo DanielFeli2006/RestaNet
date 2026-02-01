@@ -1,9 +1,12 @@
-// js/app.js
+// js/app.js - Restanet Modern UI
 (function () {
+  'use strict';
+
   const ready = (cb) => document.readyState !== 'loading'
     ? cb()
     : document.addEventListener('DOMContentLoaded', cb);
 
+  // Initialize DataTables
   const initDataTables = () => {
     if (typeof DataTable === 'undefined') return;
     document.querySelectorAll('table.datatable').forEach((tbl) => {
@@ -20,6 +23,7 @@
     });
   };
 
+  // Checkout guard for minimum items
   const initCheckoutGuard = () => {
     const btnCheckout = document.getElementById('btnCheckout');
     const countEl = document.getElementById('cartCount');
@@ -28,17 +32,21 @@
     if (count >= 2) {
       btnCheckout.classList.remove('disabled');
       btnCheckout.removeAttribute('aria-disabled');
+      btnCheckout.removeAttribute('tabindex');
     }
   };
 
+  // Session inactivity watcher
   const initInactivityWatcher = () => {
     const cfg = window.restanetConfig || {};
     const timeout = (cfg.sessionTimeout || 600) * 1000;
     const grace = (cfg.sessionGrace || 0) * 1000;
     let warningTimer;
     let logoutTimer;
+    let isActive = true;
 
     const heartbeat = () => {
+      if (!isActive) return;
       fetch(`${cfg.baseUrl}controllers/auth/cauth.php?a=heartbeat`, {
         method: 'POST',
         credentials: 'include'
@@ -56,47 +64,79 @@
       const toast = document.getElementById('timeoutWarning');
       if (toast) {
         toast.hidden = false;
+        toast.classList.add('show');
+      }
+    };
+
+    const hideWarning = () => {
+      const toast = document.getElementById('timeoutWarning');
+      if (toast) {
+        toast.hidden = true;
+        toast.classList.remove('show');
       }
     };
 
     const scheduleTimers = () => {
       clearTimeout(warningTimer);
       clearTimeout(logoutTimer);
+      hideWarning();
       warningTimer = setTimeout(showWarning, timeout);
       logoutTimer = setTimeout(() => {
         window.location.href = `${cfg.baseUrl}controllers/auth/cauth.php?a=logout&inactive=1`;
       }, timeout + grace);
     };
 
-    ['mousemove', 'keydown', 'touchstart'].forEach((evt) => {
-      document.addEventListener(evt, () => {
+    // Throttle activity events
+    let lastActivity = Date.now();
+    const handleActivity = () => {
+      const now = Date.now();
+      if (now - lastActivity > 30000) { // 30 seconds throttle
+        lastActivity = now;
         heartbeat();
         scheduleTimers();
-      }, { passive: true });
+      }
+    };
+
+    ['mousemove', 'keydown', 'touchstart', 'click', 'scroll'].forEach((evt) => {
+      document.addEventListener(evt, handleActivity, { passive: true });
     });
 
     scheduleTimers();
   };
 
+  // Real-time table status
   const initMesasRealtime = () => {
     const grid = document.querySelector('[data-mesas-grid]');
     if (!grid) return;
 
     const render = (mesas) => {
+      if (!mesas || mesas.length === 0) {
+        grid.innerHTML = `
+          <div class="text-center py-3">
+            <i class="fa-solid fa-table-cells-large fa-2x text-muted opacity-25 mb-2"></i>
+            <p class="text-muted small mb-0">No hay mesas configuradas</p>
+          </div>
+        `;
+        return;
+      }
+
       grid.innerHTML = mesas.map((mesa) => `
         <article class="mesa-card ${mesa.estado}">
-          <header>
-            <h3>Mesa ${mesa.numero}</h3>
-            <span>${mesa.capacidad} pax</span>
+          <header class="d-flex justify-content-between align-items-center">
+            <h5 class="mb-0 fw-semibold">Mesa ${mesa.numero}</h5>
+            <span class="badge bg-secondary-subtle text-secondary-emphasis">${mesa.capacidad} pax</span>
           </header>
-          <div class="mesa-card__estado">
-            <span class="badge ${mesa.estado === 'ocupada' ? 'bg-danger' : 'bg-success'}">
-              ${mesa.estado}
+          <div class="mesa-card__estado my-2">
+            <span class="badge ${mesa.estado === 'ocupada' ? 'bg-danger-subtle text-danger-emphasis' : 'bg-success-subtle text-success-emphasis'} w-100 py-2">
+              <i class="fa-solid ${mesa.estado === 'ocupada' ? 'fa-user-clock' : 'fa-check-circle'} me-1"></i>
+              ${mesa.estado === 'ocupada' ? 'Ocupada' : 'Disponible'}
             </span>
           </div>
           <footer>
-            <button data-mesa="${mesa.id}" data-estado="${mesa.estado === 'ocupada' ? 'disponible' : 'ocupada'}" class="btn btn-sm btn-brand w-100">
-              Marcar ${mesa.estado === 'ocupada' ? 'Disponible' : 'Ocupada'}
+            <button data-mesa="${mesa.id}" data-estado="${mesa.estado === 'ocupada' ? 'disponible' : 'ocupada'}" 
+                    class="btn btn-sm ${mesa.estado === 'ocupada' ? 'btn-outline-success' : 'btn-brand'} w-100">
+              <i class="fa-solid ${mesa.estado === 'ocupada' ? 'fa-circle-check' : 'fa-user-plus'} me-1"></i>
+              ${mesa.estado === 'ocupada' ? 'Liberar' : 'Ocupar'}
             </button>
           </footer>
         </article>
@@ -104,10 +144,18 @@
     };
 
     const load = () => {
-      fetch(`${window.restanetConfig.baseUrl}controllers/pedidos/cmesas.php`, { credentials: 'include' })
+      const cfg = window.restanetConfig || {};
+      fetch(`${cfg.baseUrl}controllers/pedidos/cmesas.php`, { credentials: 'include' })
         .then((res) => res.json())
-        .then((data) => render(data.mesas))
-        .catch(() => {});
+        .then((data) => render(data.mesas || []))
+        .catch(() => {
+          grid.innerHTML = `
+            <div class="text-center py-3 text-muted">
+              <i class="fa-solid fa-exclamation-circle me-1"></i>
+              Error al cargar mesas
+            </div>
+          `;
+        });
     };
 
     grid.addEventListener('click', (evt) => {
@@ -115,24 +163,110 @@
       if (!btn) return;
       const mesa = btn.getAttribute('data-mesa');
       const estado = btn.getAttribute('data-estado');
-      fetch(`${window.restanetConfig.baseUrl}controllers/pedidos/cped.php?a=actualizar_mesa`, {
+      const cfg = window.restanetConfig || {};
+      
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+      
+      fetch(`${cfg.baseUrl}controllers/pedidos/cped.php?a=actualizar_mesa`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         credentials: 'include',
         body: `mesa_id=${encodeURIComponent(mesa)}&estado=${encodeURIComponent(estado)}`
       })
         .then((res) => res.json())
-        .then(() => load());
+        .then(() => load())
+        .catch(() => load());
     });
 
     load();
     setInterval(load, 15000);
   };
 
+  // Add page load animations
+  const initAnimations = () => {
+    // Animate cards on page load
+    const cards = document.querySelectorAll('.card, .alert');
+    cards.forEach((card, index) => {
+      card.style.opacity = '0';
+      card.style.transform = 'translateY(20px)';
+      setTimeout(() => {
+        card.style.transition = 'opacity 0.4s ease, transform 0.4s ease';
+        card.style.opacity = '1';
+        card.style.transform = 'translateY(0)';
+      }, 50 + (index * 50));
+    });
+
+    // Add ripple effect to buttons
+    document.querySelectorAll('.btn').forEach(btn => {
+      btn.addEventListener('click', function(e) {
+        const ripple = document.createElement('span');
+        const rect = this.getBoundingClientRect();
+        const size = Math.max(rect.width, rect.height);
+        const x = e.clientX - rect.left - size / 2;
+        const y = e.clientY - rect.top - size / 2;
+        
+        ripple.style.cssText = `
+          position: absolute;
+          width: ${size}px;
+          height: ${size}px;
+          left: ${x}px;
+          top: ${y}px;
+          background: rgba(255,255,255,0.3);
+          border-radius: 50%;
+          transform: scale(0);
+          animation: ripple 0.6s linear;
+          pointer-events: none;
+        `;
+        
+        this.style.position = 'relative';
+        this.style.overflow = 'hidden';
+        this.appendChild(ripple);
+        
+        setTimeout(() => ripple.remove(), 600);
+      });
+    });
+  };
+
+  // Add ripple animation CSS
+  const addRippleStyles = () => {
+    if (document.getElementById('ripple-styles')) return;
+    const style = document.createElement('style');
+    style.id = 'ripple-styles';
+    style.textContent = `
+      @keyframes ripple {
+        to {
+          transform: scale(4);
+          opacity: 0;
+        }
+      }
+    `;
+    document.head.appendChild(style);
+  };
+
+  // Smooth scroll for anchor links
+  const initSmoothScroll = () => {
+    document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+      anchor.addEventListener('click', function(e) {
+        const href = this.getAttribute('href');
+        if (href === '#') return;
+        e.preventDefault();
+        const target = document.querySelector(href);
+        if (target) {
+          target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      });
+    });
+  };
+
+  // Initialize all modules
   ready(() => {
+    addRippleStyles();
     initDataTables();
     initCheckoutGuard();
     initInactivityWatcher();
     initMesasRealtime();
+    initAnimations();
+    initSmoothScroll();
   });
 })();
