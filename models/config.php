@@ -8,8 +8,8 @@ define('DB_PASS', '');
 date_default_timezone_set('America/Bogota');
 
 // Ajusta la ruta base según tu ubicación en htdocs.
-// En este workspace el proyecto está en: /Proyects/restanet/
-define('BASE_PATH', '/Proyects/restanet/');
+// En este workspace el proyecto está en: /restanet/
+define('BASE_PATH', '/restanet/');
 define('BASE_URL', (isset($_SERVER['HTTP_HOST'])
 	? ((isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on') ? 'https' : 'http') . '://' . $_SERVER['HTTP_HOST']
 	: '') . BASE_PATH);

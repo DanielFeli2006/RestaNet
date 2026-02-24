@@ -14,11 +14,18 @@ switch ($action) {
         break;
     case 'create':
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+            if (!validate_csrf($_POST['csrf_token'] ?? null)) {
+                $_SESSION['error'] = 'Token CSRF inválido.';
+                header('Location: cped.php?a=create');
+                exit;
+            }
             $stmt = $pdo->prepare('INSERT INTO pedidos (usuario_id, mesa_id, estado) VALUES (?,?,?)');
             $stmt->execute([$_SESSION['id'], $_POST['mesa_id'], 'pendiente']);
             header('Location: cped.php');
             exit;
         }
+        // Cargar mesas disponibles para el formulario
+        $mesas = $pdo->query('SELECT id, numero, estado FROM mesas ORDER BY numero')->fetchAll(PDO::FETCH_ASSOC);
         include __DIR__ . '/../../views/pedidos/vped_form.php';
         break;
     case 'detalle':
