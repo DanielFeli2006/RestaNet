@@ -18,17 +18,31 @@
           <span class="fs-4 fw-bold" style="color: #C41E3A;">#<?php echo (int)($_GET['pedido'] ?? 0); ?></span>
         </p>
         
-        <?php if ($factura && !empty($factura['qr_path'])): ?>
-          <div class="qr-container mb-4 p-4 bg-light rounded-4">
+        <?php if ($factura && !empty($factura['token_acceso'])): ?>
+          <div class="access-link-container mb-4 p-4 bg-light rounded-4">
             <p class="small text-muted mb-2">
-              <i class="fa-solid fa-qrcode me-1"></i>Escanea este código para ver tu pedido
+              <i class="fa-solid fa-link me-1"></i>Guarda este enlace para ver tu factura
             </p>
-            <img class="img-fluid rounded-3 shadow-sm" style="max-width: 220px;" src="<?php echo BASE_PATH . $factura['qr_path']; ?>" alt="Código QR del pedido">
+            <?php $enlace_publico = BASE_URL . 'controllers/facturacion/cfact.php?a=ver_publica&token=' . urlencode($factura['token_acceso']); ?>
+            <div class="input-group mb-2">
+              <input type="text" class="form-control form-control-sm" value="<?php echo e($enlace_publico); ?>" id="enlaceFactura" readonly>
+              <button class="btn btn-outline-success btn-sm" type="button" onclick="copiarEnlaceFactura()">
+                <i class="fa-solid fa-copy"></i>
+              </button>
+            </div>
+            <a href="<?php echo e($enlace_publico); ?>" class="btn btn-success btn-sm" target="_blank">
+              <i class="fa-solid fa-external-link me-1"></i>Ver factura
+            </a>
+          </div>
+          <div class="alert alert-info small text-start">
+            <i class="fa-solid fa-info-circle me-1"></i>
+            <strong>Importante:</strong> Este enlace te permite ver tu factura sin necesidad de iniciar sesión. 
+            Es válido por 30 días. Guárdalo o compártelo si lo necesitas.
           </div>
         <?php else: ?>
-          <div class="alert alert-warning d-flex align-items-center gap-2 text-start" role="alert">
-            <i class="fa-solid fa-triangle-exclamation fa-lg"></i>
-            <div class="small">El código QR no está disponible. Ejecuta <code>composer install</code> para instalar la librería de QR.</div>
+          <div class="alert alert-success d-flex align-items-center gap-2 text-start" role="alert">
+            <i class="fa-solid fa-circle-check fa-lg"></i>
+            <div class="small">Tu pedido ha sido registrado. Puedes ver el estado desde tu cuenta.</div>
           </div>
         <?php endif; ?>
         
@@ -71,5 +85,25 @@
   to { opacity: 1; transform: translateY(0); }
 }
 </style>
+
+<script>
+function copiarEnlaceFactura() {
+  const input = document.getElementById('enlaceFactura');
+  input.select();
+  input.setSelectionRange(0, 99999);
+  navigator.clipboard.writeText(input.value).then(() => {
+    const btn = input.nextElementSibling;
+    const originalHtml = btn.innerHTML;
+    btn.innerHTML = '<i class="fa-solid fa-check"></i>';
+    btn.classList.remove('btn-outline-success');
+    btn.classList.add('btn-success');
+    setTimeout(() => {
+      btn.innerHTML = originalHtml;
+      btn.classList.remove('btn-success');
+      btn.classList.add('btn-outline-success');
+    }, 2000);
+  });
+}
+</script>
 
 <?php include __DIR__ . '/../layout/pie.php'; ?>

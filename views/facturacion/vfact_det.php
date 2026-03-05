@@ -18,12 +18,12 @@
         </div>
       </div>
       <div class="d-flex gap-2">
-        <button class="btn btn-brand" disabled>
+        <button class="btn btn-outline-secondary" onclick="window.print()">
           <i class="fa-solid fa-print me-2"></i>Imprimir
         </button>
-        <button class="btn btn-accent" disabled>
+        <a href="<?php echo BASE_PATH; ?>controllers/facturacion/cfact.php?a=pdf&id=<?php echo (int)($_GET['id'] ?? 0); ?>" class="btn btn-accent">
           <i class="fa-solid fa-file-pdf me-2"></i>Descargar PDF
-        </button>
+        </a>
       </div>
     </div>
     
@@ -47,6 +47,22 @@
           </div>
         </div>
         
+        <!-- Estado de la factura -->
+        <?php 
+        $estado = $factura['estado'] ?? 'pendiente';
+        $estadoClass = match($estado) {
+            'pagada' => 'bg-success',
+            'anulada' => 'bg-danger',
+            default => 'bg-warning text-dark'
+        };
+        ?>
+        <div class="mb-4">
+          <span class="badge <?php echo $estadoClass; ?> px-3 py-2">
+            <i class="fa-solid fa-<?php echo $estado === 'pagada' ? 'check-circle' : ($estado === 'anulada' ? 'times-circle' : 'clock'); ?> me-1"></i>
+            Estado: <?php echo ucfirst($estado); ?>
+          </span>
+        </div>
+        
         <!-- Products Table -->
         <div class="table-responsive mb-4">
           <table class="table align-middle">
@@ -64,7 +80,7 @@
                 <td class="ps-3">
                   <div class="d-flex align-items-center gap-2">
                     <i class="fa-solid fa-circle-check" style="color: #28A745;"></i>
-                    <?php echo htmlspecialchars($d['nombre']); ?>
+                    <?php echo e($d['nombre']); ?>
                   </div>
                 </td>
                 <td class="text-center">
@@ -100,36 +116,85 @@
           </div>
         </div>
         
-        <!-- QR Section -->
+        <!-- Enlace público de acceso -->
         <div class="mt-4 pt-4 border-top">
           <div class="row align-items-center">
             <div class="col-auto">
-              <?php if (!empty($factura['qr_path'])): ?>
-                <img src="<?php echo BASE_PATH . $factura['qr_path']; ?>" alt="QR Pedido" class="rounded-3 shadow-sm" style="width:140px;height:140px"/>
-              <?php else: ?>
-                <div class="d-flex align-items-center justify-content-center bg-light rounded-3" style="width:140px;height:140px">
-                  <i class="fa-solid fa-qrcode fa-3x text-muted"></i>
-                </div>
-              <?php endif; ?>
+              <div class="d-flex align-items-center justify-content-center bg-success-subtle rounded-3" style="width:80px;height:80px">
+                <i class="fa-solid fa-link fa-2x text-success"></i>
+              </div>
             </div>
             <div class="col">
-              <?php if (!empty($factura['qr_path'])): ?>
+              <?php if (!empty($factura['token_acceso'])): ?>
                 <h6 class="fw-bold mb-2">
-                  <i class="fa-solid fa-qrcode me-2" style="color: #F4A900;"></i>Código QR del pedido
+                  <i class="fa-solid fa-share-from-square me-2" style="color: #28A745;"></i>Enlace de acceso público
                 </h6>
-                <p class="text-muted mb-0 small">Escanea este código para confirmar el pedido y ver los detalles del pago desde cualquier dispositivo.</p>
+                <p class="text-muted mb-2 small">
+                  Comparte este enlace con el cliente para que pueda ver su factura sin iniciar sesión.
+                </p>
+                <?php $enlace_publico = BASE_URL . 'controllers/facturacion/cfact.php?a=ver_publica&token=' . urlencode($factura['token_acceso']); ?>
+                <div class="input-group input-group-sm">
+                  <input type="text" class="form-control" value="<?php echo e($enlace_publico); ?>" id="enlacePublico" readonly>
+                  <button class="btn btn-outline-success" type="button" onclick="copiarEnlace()">
+                    <i class="fa-solid fa-copy"></i>
+                  </button>
+                </div>
+                <small class="text-muted d-block mt-2">
+                  <i class="fa-solid fa-clock me-1"></i>
+                  Válido hasta: <?php echo date('d/m/Y', strtotime($factura['token_expiracion'])); ?>
+                </small>
               <?php else: ?>
                 <div class="alert alert-warning small mb-0">
                   <i class="fa-solid fa-triangle-exclamation me-2"></i>
-                  Código QR no disponible. Ejecuta <code>composer install</code> para instalar la librería.
+                  No se ha generado un enlace de acceso público para esta factura.
                 </div>
               <?php endif; ?>
             </div>
           </div>
         </div>
+        
+        <!-- Acciones de estado -->
+        <div class="mt-4 pt-4 border-top">
+          <h6 class="fw-bold mb-3">
+            <i class="fa-solid fa-gear me-2 text-muted"></i>Cambiar estado
+          </h6>
+          <form method="post" action="<?php echo BASE_PATH; ?>controllers/facturacion/cfact.php?a=actualizar_estado" class="d-flex gap-2 flex-wrap">
+            <?php echo csrf_field(); ?>
+            <input type="hidden" name="factura_id" value="<?php echo e($factura['id']); ?>">
+            <select name="estado" class="form-select form-select-sm" style="width: auto;">
+              <option value="pendiente" <?php echo $estado === 'pendiente' ? 'selected' : ''; ?>>Pendiente</option>
+              <option value="pagada" <?php echo $estado === 'pagada' ? 'selected' : ''; ?>>Pagada</option>
+              <option value="anulada" <?php echo $estado === 'anulada' ? 'selected' : ''; ?>>Anulada</option>
+            </select>
+            <button type="submit" class="btn btn-sm btn-primary">
+              <i class="fa-solid fa-save me-1"></i>Guardar
+            </button>
+          </form>
+        </div>
       </div>
     </div>
   </div>
 </div>
+
+<script>
+function copiarEnlace() {
+  const input = document.getElementById('enlacePublico');
+  input.select();
+  input.setSelectionRange(0, 99999);
+  navigator.clipboard.writeText(input.value).then(() => {
+    // Feedback visual
+    const btn = input.nextElementSibling;
+    const originalHtml = btn.innerHTML;
+    btn.innerHTML = '<i class="fa-solid fa-check"></i>';
+    btn.classList.remove('btn-outline-success');
+    btn.classList.add('btn-success');
+    setTimeout(() => {
+      btn.innerHTML = originalHtml;
+      btn.classList.remove('btn-success');
+      btn.classList.add('btn-outline-success');
+    }, 2000);
+  });
+}
+</script>
 
 <?php include __DIR__ . '/../layout/pie.php'; ?>

@@ -16,6 +16,20 @@
   <?php endif; ?>
 </div>
 
+<?php if (!empty($_SESSION['success'])): ?>
+<div class="alert alert-success alert-dismissible fade show" role="alert">
+  <i class="fa-solid fa-check-circle me-2"></i><?php echo e($_SESSION['success']); unset($_SESSION['success']); ?>
+  <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+</div>
+<?php endif; ?>
+
+<?php if (!empty($_SESSION['error'])): ?>
+<div class="alert alert-danger alert-dismissible fade show" role="alert">
+  <i class="fa-solid fa-exclamation-circle me-2"></i><?php echo e($_SESSION['error']); unset($_SESSION['error']); ?>
+  <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+</div>
+<?php endif; ?>
+
 <?php if (empty($productos ?? [])): ?>
   <div class="card shadow-soft border-0">
     <div class="card-body text-center py-5">
@@ -40,22 +54,29 @@
             <th class="ps-4">Producto</th>
             <th>Categoría</th>
             <th>Precio</th>
+            <th>Estado</th>
             <th>Creado</th>
             <?php if (has_role(['admin'])): ?><th class="text-center pe-4">Acciones</th><?php endif; ?>
           </tr>
         </thead>
         <tbody>
         <?php foreach (($productos ?? []) as $p): ?>
-          <tr>
+          <tr class="<?php echo empty($p['activo']) ? 'table-secondary opacity-75' : ''; ?>">
             <td class="ps-4">
               <div class="d-flex align-items-center gap-3">
-                <div class="rounded-3 d-flex align-items-center justify-content-center bg-light" style="width: 48px; height: 48px;">
-                  <i class="fa-solid fa-utensils text-muted"></i>
-                </div>
+                <?php if (!empty($p['imagen'])): ?>
+                  <img src="<?php echo BASE_PATH; ?>img/productos/<?php echo e($p['imagen']); ?>" 
+                       alt="<?php echo e($p['nombre']); ?>" 
+                       class="rounded-3" style="width: 48px; height: 48px; object-fit: cover;">
+                <?php else: ?>
+                  <div class="rounded-3 d-flex align-items-center justify-content-center bg-light" style="width: 48px; height: 48px;">
+                    <i class="fa-solid fa-utensils text-muted"></i>
+                  </div>
+                <?php endif; ?>
                 <div>
-                  <div class="fw-semibold"><?php echo htmlspecialchars($p['nombre']); ?></div>
+                  <div class="fw-semibold"><?php echo e($p['nombre']); ?></div>
                   <div class="small text-muted text-truncate" style="max-width: 250px;">
-                    <?php echo htmlspecialchars($p['descripcion'] ?? ''); ?>
+                    <?php echo e($p['descripcion'] ?? ''); ?>
                   </div>
                 </div>
               </div>
@@ -63,11 +84,18 @@
             <td>
               <span class="badge bg-light text-dark">
                 <i class="fa-solid fa-tag me-1" style="color: #F4A900;"></i>
-                <?php echo htmlspecialchars($p['categoria'] ?? '-'); ?>
+                <?php echo e($p['categoria'] ?? '-'); ?>
               </span>
             </td>
             <td>
               <span class="fw-bold" style="color: #C41E3A;">$<?php echo number_format($p['precio'], 2); ?></span>
+            </td>
+            <td>
+              <?php if (!empty($p['activo'])): ?>
+                <span class="badge bg-success"><i class="fa-solid fa-check me-1"></i>Activo</span>
+              <?php else: ?>
+                <span class="badge bg-secondary"><i class="fa-solid fa-eye-slash me-1"></i>Inactivo</span>
+              <?php endif; ?>
             </td>
             <td>
               <span class="small text-muted">
@@ -81,8 +109,7 @@
                 <a class="btn btn-sm btn-outline-primary" href="<?php echo BASE_PATH; ?>controllers/catalogo/cprd.php?a=edit&id=<?php echo e($p['id']); ?>" title="Editar">
                   <i class="fa-solid fa-pen-to-square"></i>
                 </a>
-                <a class="btn btn-sm btn-outline-danger" href="<?php echo BASE_PATH; ?>controllers/catalogo/cprd.php?a=delete&id=<?php echo e($p['id']); ?>" 
-                   onclick="return confirm('¿Eliminar este producto?');" title="Eliminar">
+                <a class="btn btn-sm btn-outline-danger" href="<?php echo BASE_PATH; ?>controllers/catalogo/cprd.php?a=delete&id=<?php echo e($p['id']); ?>" title="Eliminar">
                   <i class="fa-solid fa-trash"></i>
                 </a>
               </div>

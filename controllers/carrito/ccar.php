@@ -1,8 +1,15 @@
 <?php
-// Controlador del carrito de compras
+/**
+ * Controlador del carrito de compras
+ * 
+ * SEGURIDAD:
+ * - Requiere autenticación
+ * - Validación CSRF en operaciones de escritura
+ * - Sanitización de IDs de productos
+ * - Transacciones para integridad de datos
+ */
 require_once __DIR__ . '/../../models/conexion.php';
 require_once __DIR__ . '/../../models/seg.php';
-require_once __DIR__ . '/../../models/qr.php';
 require_login();
 require_role(['cliente','admin']); // Admin puede probar
 
@@ -64,50 +71,59 @@ switch ($action) {
         header('Location: ccar.php');
         exit;
     case 'checkout':
-        // Solo permitir si hay >=2 items
+        // SEGURIDAD: Validar mínimo de items
         if (cart_items_count() < 2) {
             $_SESSION['error'] = 'El carrito requiere al menos 2 ítems.';
             header('Location: ccar.php');
             exit;
         }
-        // Crear pedido y detalle
+        
+        // Crear pedido y detalle con transacción para integridad
         $pdo->beginTransaction();
         try {
             $mesa_id = null; // Para clientes web podría ser null o mesa virtual
             $stmt = $pdo->prepare('INSERT INTO pedidos (usuario_id, mesa_id, estado) VALUES (?,?,?)');
             $stmt->execute([$_SESSION['id'], $mesa_id, 'pendiente']);
             $pedido_id = (int)$pdo->lastInsertId();
+            
             $insDetalle = $pdo->prepare('INSERT INTO detalle_pedido (pedido_id, producto_id, cantidad, precio) VALUES (?,?,?,?)');
             foreach ($_SESSION['cart'] as $pid => $item) {
                 $insDetalle->execute([$pedido_id, $pid, $item['cantidad'], $item['precio']]);
             }
+            
             // Calcular totales
             $subtotal = cart_total();
             $impuestos = round($subtotal * 0.19, 2);
             $total = round($subtotal + $impuestos, 2);
-            // Generar QR
-            $qr_text = 'Pedido #' . $pedido_id . "|Total:" . $total . "|Items:" . cart_items_count();
-            $qr_path_rel = 'img/qr/pedido_' . $pedido_id . '.png';
-            $qr_full = __DIR__ . '/../../' . $qr_path_rel;
-            $res_qr = generate_qr($qr_text, $qr_full);
-            $qr_ok = $res_qr['ok'] ?? false;
-            // Insert factura
-            $stmtF = $pdo->prepare('INSERT INTO facturas (pedido_id, subtotal, impuestos, total, qr_path) VALUES (?,?,?,?,?)');
-            $stmtF->execute([$pedido_id, $subtotal, $impuestos, $total, $qr_ok ? $qr_path_rel : null]);
+            
+            // SEGURIDAD: Generar token de acceso seguro (64 caracteres hex)
+            $token_acceso = bin2hex(random_bytes(32));
+            $token_expiracion = date('Y-m-d H:i:s', strtotime('+30 days'));
+            
+            // Insert factura con token de acceso
+            $stmtF = $pdo->prepare('INSERT INTO facturas (pedido_id, subtotal, impuestos, total, token_acceso, token_expiracion, estado) VALUES (?,?,?,?,?,?,?)');
+            $stmtF->execute([$pedido_id, $subtotal, $impuestos, $total, $token_acceso, $token_expiracion, 'pendiente']);
+            
             $pdo->commit();
+            
             // Limpiar carrito
             $_SESSION['cart'] = [];
             header('Location: ccar.php?a=done&pedido=' . $pedido_id);
             exit;
         } catch (Throwable $e) {
             $pdo->rollBack();
-            $_SESSION['error'] = 'Checkout falló: ' . $e->getMessage();
+            error_log('Error en checkout: ' . $e->getMessage());
+            $_SESSION['error'] = 'Error al procesar el pedido. Intenta nuevamente.';
             header('Location: ccar.php');
             exit;
         }
     case 'done':
         $pedido_id = (int)($_GET['pedido'] ?? 0);
-        // Mostrar vista final con QR
+        if (!$pedido_id) {
+            header('Location: ccar.php');
+            exit;
+        }
+        // Mostrar vista final con enlace de acceso
         $stmt = $pdo->prepare('SELECT * FROM facturas WHERE pedido_id=?');
         $stmt->execute([$pedido_id]);
         $factura = $stmt->fetch(PDO::FETCH_ASSOC);

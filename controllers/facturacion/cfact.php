@@ -1,103 +1,259 @@
 <?php
+/**
+ * Controlador de Facturación
+ * 
+ * SEGURIDAD:
+ * - Requiere autenticación para operaciones administrativas
+ * - Permite acceso público solo mediante token válido no expirado
+ * - Validación de entrada y sanitización de datos
+ * - Rate limiting para acceso público
+ * - Registro de accesos para auditoría
+ */
 require_once __DIR__ . '/../../models/conexion.php';
 require_once __DIR__ . '/../../models/seg.php';
-require_login();
-require_role(['admin','cajero']);
 
 $action = $_GET['a'] ?? 'list';
 
+// Acción pública: ver factura con token (sin login)
+if ($action === 'ver_publica') {
+    $token = trim($_GET['token'] ?? '');
+    
+    // SEGURIDAD: Validar formato del token (64 caracteres hexadecimales)
+    if (!preg_match('/^[a-f0-9]{64}$/i', $token)) {
+        http_response_code(400);
+        include __DIR__ . '/../../views/facturacion/vfact_error.php';
+        exit;
+    }
+    
+    // SEGURIDAD: Rate limiting por IP
+    $ip = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
+    if (!check_rate_limit('factura_publica_' . $ip, 30, 60)) {
+        http_response_code(429);
+        $error_msg = 'Demasiadas solicitudes. Intenta nuevamente en un minuto.';
+        include __DIR__ . '/../../views/facturacion/vfact_error.php';
+        exit;
+    }
+    
+    // Buscar factura por token
+    $stmt = $pdo->prepare('SELECT f.*, p.estado AS pedido_estado, p.fecha_creacion AS pedido_fecha 
+                           FROM facturas f 
+                           INNER JOIN pedidos p ON p.id = f.pedido_id 
+                           WHERE f.token_acceso = ? AND f.token_expiracion > NOW()');
+    $stmt->execute([$token]);
+    $factura = $stmt->fetch(PDO::FETCH_ASSOC);
+    
+    if (!$factura) {
+        http_response_code(404);
+        $error_msg = 'Factura no encontrada o el enlace ha expirado.';
+        include __DIR__ . '/../../views/facturacion/vfact_error.php';
+        exit;
+    }
+    
+    // SEGURIDAD: Registrar acceso para auditoría
+    $stmtLog = $pdo->prepare('INSERT INTO factura_accesos (factura_id, ip_address, user_agent) VALUES (?,?,?)');
+    $stmtLog->execute([
+        $factura['id'], 
+        $ip, 
+        substr($_SERVER['HTTP_USER_AGENT'] ?? '', 0, 500)
+    ]);
+    
+    // Obtener detalle del pedido
+    $stmt = $pdo->prepare('SELECT d.*, p.nombre FROM detalle_pedido d 
+                           INNER JOIN productos p ON p.id = d.producto_id 
+                           WHERE d.pedido_id = ?');
+    $stmt->execute([$factura['pedido_id']]);
+    $detalle = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    
+    // Vista pública (sin autenticación requerida)
+    include __DIR__ . '/../../views/facturacion/vfact_publica.php';
+    exit;
+}
+
+// Todas las demás acciones requieren autenticación
+require_login();
+require_role(['admin','cajero']);
+
 switch ($action) {
     case 'list':
-        $facturas = $pdo->query('SELECT p.id pedido_id, p.fecha_creacion, SUM(d.cantidad * d.precio) total FROM pedidos p INNER JOIN detalle_pedido d ON d.pedido_id=p.id WHERE p.estado="completado" GROUP BY p.id ORDER BY p.fecha_creacion DESC')->fetchAll(PDO::FETCH_ASSOC);
+        $facturas = $pdo->query('
+            SELECT f.id, f.pedido_id, f.subtotal, f.impuestos, f.total, f.estado, f.fecha_creacion,
+                   p.estado AS pedido_estado, u.nombre AS cliente_nombre
+            FROM facturas f 
+            INNER JOIN pedidos p ON p.id = f.pedido_id 
+            LEFT JOIN usuarios u ON u.id = p.usuario_id
+            ORDER BY f.fecha_creacion DESC
+        ')->fetchAll(PDO::FETCH_ASSOC);
         include __DIR__ . '/../../views/facturacion/vfact.php';
         break;
-        case 'pdf':
-                // Generar PDF de la factura usando Dompdf
-                require_login(); require_role(['admin','cajero']);
-                $pedido_id = (int)($_GET['id'] ?? 0);
-                if (!$pedido_id) { header('Location: cfact.php'); exit; }
-                // Datos de factura
-                $stmt = $pdo->prepare('SELECT * FROM facturas WHERE pedido_id=?');
-                $stmt->execute([$pedido_id]);
-                $factura = $stmt->fetch(PDO::FETCH_ASSOC);
-                if (!$factura) { header('Location: cfact.php?a=generar&id=' . $pedido_id); exit; }
-                $stmt = $pdo->prepare('SELECT d.*, p.nombre FROM detalle_pedido d INNER JOIN productos p ON p.id=d.producto_id WHERE d.pedido_id=?');
-                $stmt->execute([$pedido_id]);
-                $detalle = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-                // Construir HTML simple
-                // Preparar QR como data URI para incrustar en el PDF (mejor que rutas relativas)
-                $qr_img_src = null;
-                if (!empty($factura['qr_path'])) {
-                    $possible = __DIR__ . '/../../' . $factura['qr_path'];
-                    if (file_exists($possible)) {
-                        $b = base64_encode(file_get_contents($possible));
-                        $qr_img_src = 'data:image/png;base64,' . $b;
-                    }
-                }
-                if ($qr_img_src === null) {
-                    // Intentar generar data URI al vuelo
-                    $items_count = count($detalle);
-                    $qr_text = 'Pedido #' . $pedido_id . "|Total:" . ($factura['total'] ?? 0) . "|Items:" . $items_count;
-                    if (function_exists('generate_qr_data_uri')) {
-                        $dq = generate_qr_data_uri($qr_text, ['size' => 140, 'format' => 'png']);
-                        if ($dq) $qr_img_src = $dq;
-                    }
-                }
-
-                ob_start();
-                ?>
-                <html><head><meta charset="utf-8"><style>body{font-family: DejaVu Sans, sans-serif;} table{width:100%;border-collapse:collapse} th,td{border:1px solid #ccc;padding:6px;font-size:12px} .right{text-align:right}</style></head><body>
-                <h2>Factura - Pedido #<?php echo $pedido_id; ?></h2>
-                <table><thead><tr><th>Producto</th><th>Cant</th><th class="right">Precio</th><th class="right">Importe</th></tr></thead><tbody>
-                <?php foreach ($detalle as $d): $imp=$d['cantidad']*$d['precio']; ?>
-                    <tr><td><?php echo htmlspecialchars($d['nombre']); ?></td><td><?php echo (int)$d['cantidad']; ?></td><td class="right">$<?php echo number_format($d['precio'],2); ?></td><td class="right">$<?php echo number_format($imp,2); ?></td></tr>
-                <?php endforeach; ?>
-                </tbody></table>
-                <p class="right">Subtotal: $<?php echo number_format($factura['subtotal'],2); ?><br>IVA (19%): $<?php echo number_format($factura['impuestos'],2); ?><br><strong>Total: $<?php echo number_format($factura['total'],2); ?></strong></p>
-                <?php if (!empty($qr_img_src)): ?><p><img src="<?php echo $qr_img_src; ?>" width="140" height="140"></p><?php endif; ?>
-                </body></html>
-                <?php
-                $html = ob_get_clean();
-                // Render con Dompdf
-                $dompdf = new Dompdf\Dompdf();
-                $dompdf->loadHtml($html);
-                $dompdf->setPaper('A4');
-                $dompdf->render();
-                $dompdf->stream('factura_pedido_' . $pedido_id . '.pdf');
-                exit;
-    case 'generar':
-        require_once __DIR__ . '/../../models/qr.php';
+        
+    case 'pdf':
+        // Generar PDF de la factura usando Dompdf
         $pedido_id = (int)($_GET['id'] ?? 0);
-        if (!$pedido_id) { header('Location: cfact.php'); exit; }
-        // Si ya existe factura, usarla; si no, crearla
-        $stmt = $pdo->prepare('SELECT * FROM facturas WHERE pedido_id=?');
+        if (!$pedido_id) { 
+            header('Location: cfact.php'); 
+            exit; 
+        }
+        
+        // Datos de factura
+        $stmt = $pdo->prepare('SELECT * FROM facturas WHERE pedido_id = ?');
         $stmt->execute([$pedido_id]);
         $factura = $stmt->fetch(PDO::FETCH_ASSOC);
+        
+        if (!$factura) { 
+            header('Location: cfact.php?a=generar&id=' . $pedido_id); 
+            exit; 
+        }
+        
+        $stmt = $pdo->prepare('SELECT d.*, p.nombre FROM detalle_pedido d 
+                               INNER JOIN productos p ON p.id = d.producto_id 
+                               WHERE d.pedido_id = ?');
+        $stmt->execute([$pedido_id]);
+        $detalle = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        // Construir HTML para el PDF
+        ob_start();
+        ?>
+        <html>
+        <head>
+            <meta charset="utf-8">
+            <style>
+                body { font-family: DejaVu Sans, sans-serif; font-size: 12px; }
+                table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+                th, td { border: 1px solid #ddd; padding: 8px; }
+                th { background-color: #C41E3A; color: white; }
+                .right { text-align: right; }
+                .header { text-align: center; margin-bottom: 30px; }
+                .header h1 { color: #C41E3A; margin: 0; }
+                .totals { margin-top: 20px; }
+                .footer { margin-top: 40px; text-align: center; font-size: 10px; color: #666; }
+            </style>
+        </head>
+        <body>
+            <div class="header">
+                <h1>RestaNet</h1>
+                <p>Factura - Pedido #<?php echo e($pedido_id); ?></p>
+                <p>Fecha: <?php echo date('d/m/Y H:i', strtotime($factura['fecha_creacion'])); ?></p>
+            </div>
+            
+            <table>
+                <thead>
+                    <tr>
+                        <th>Producto</th>
+                        <th>Cantidad</th>
+                        <th class="right">Precio</th>
+                        <th class="right">Importe</th>
+                    </tr>
+                </thead>
+                <tbody>
+                <?php foreach ($detalle as $d): $imp = $d['cantidad'] * $d['precio']; ?>
+                    <tr>
+                        <td><?php echo e($d['nombre']); ?></td>
+                        <td><?php echo (int)$d['cantidad']; ?></td>
+                        <td class="right">$<?php echo number_format($d['precio'], 2); ?></td>
+                        <td class="right">$<?php echo number_format($imp, 2); ?></td>
+                    </tr>
+                <?php endforeach; ?>
+                </tbody>
+            </table>
+            
+            <div class="totals">
+                <p class="right">Subtotal: $<?php echo number_format($factura['subtotal'], 2); ?></p>
+                <p class="right">IVA (19%): $<?php echo number_format($factura['impuestos'], 2); ?></p>
+                <p class="right"><strong>Total: $<?php echo number_format($factura['total'], 2); ?></strong></p>
+            </div>
+            
+            <div class="footer">
+                <p>Gracias por su compra - RestaNet</p>
+                <p>Este documento es un comprobante de su pedido</p>
+            </div>
+        </body>
+        </html>
+        <?php
+        $html = ob_get_clean();
+        
+        // Render con Dompdf
+        $dompdf = new Dompdf\Dompdf();
+        $dompdf->loadHtml($html);
+        $dompdf->setPaper('A4');
+        $dompdf->render();
+        $dompdf->stream('factura_pedido_' . $pedido_id . '.pdf');
+        exit;
+        
+    case 'generar':
+        $pedido_id = (int)($_GET['id'] ?? 0);
+        if (!$pedido_id) { 
+            header('Location: cfact.php'); 
+            exit; 
+        }
+        
+        // Si ya existe factura, usarla; si no, crearla
+        $stmt = $pdo->prepare('SELECT * FROM facturas WHERE pedido_id = ?');
+        $stmt->execute([$pedido_id]);
+        $factura = $stmt->fetch(PDO::FETCH_ASSOC);
+        
         if (!$factura) {
             // Calcular totales desde detalle_pedido
-            $stmt = $pdo->prepare('SELECT producto_id, cantidad, precio FROM detalle_pedido WHERE pedido_id=?');
+            $stmt = $pdo->prepare('SELECT producto_id, cantidad, precio FROM detalle_pedido WHERE pedido_id = ?');
             $stmt->execute([$pedido_id]);
             $items = $stmt->fetchAll(PDO::FETCH_ASSOC);
-            $subtotal = 0.0; foreach ($items as $it) { $subtotal += $it['cantidad'] * $it['precio']; }
+            
+            $subtotal = 0.0;
+            foreach ($items as $it) { 
+                $subtotal += $it['cantidad'] * $it['precio']; 
+            }
             $impuestos = round($subtotal * 0.19, 2);
             $total = round($subtotal + $impuestos, 2);
-            $qr_text = 'Pedido #' . $pedido_id . "|Total:" . $total . "|Items:" . count($items);
-            $qr_path_rel = 'img/qr/pedido_' . $pedido_id . '.png';
-            $qr_full = __DIR__ . '/../../' . $qr_path_rel;
-            $qr_ok = generate_qr_png($qr_text, $qr_full);
-            $stmtF = $pdo->prepare('INSERT INTO facturas (pedido_id, subtotal, impuestos, total, qr_path) VALUES (?,?,?,?,?)');
-            $stmtF->execute([$pedido_id, $subtotal, $impuestos, $total, $qr_ok ? $qr_path_rel : null]);
-            $stmt = $pdo->prepare('SELECT * FROM facturas WHERE pedido_id=?');
+            
+            // SEGURIDAD: Generar token de acceso seguro
+            $token_acceso = bin2hex(random_bytes(32));
+            $token_expiracion = date('Y-m-d H:i:s', strtotime('+30 days'));
+            
+            $stmtF = $pdo->prepare('INSERT INTO facturas (pedido_id, subtotal, impuestos, total, token_acceso, token_expiracion, estado) VALUES (?,?,?,?,?,?,?)');
+            $stmtF->execute([$pedido_id, $subtotal, $impuestos, $total, $token_acceso, $token_expiracion, 'pendiente']);
+            
+            $stmt = $pdo->prepare('SELECT * FROM facturas WHERE pedido_id = ?');
             $stmt->execute([$pedido_id]);
             $factura = $stmt->fetch(PDO::FETCH_ASSOC);
         }
+        
         // Items y datos para vista
-        $stmt = $pdo->prepare('SELECT d.*, p.nombre FROM detalle_pedido d INNER JOIN productos p ON p.id=d.producto_id WHERE d.pedido_id=?');
+        $stmt = $pdo->prepare('SELECT d.*, p.nombre FROM detalle_pedido d 
+                               INNER JOIN productos p ON p.id = d.producto_id 
+                               WHERE d.pedido_id = ?');
         $stmt->execute([$pedido_id]);
         $detalle = $stmt->fetchAll(PDO::FETCH_ASSOC);
         include __DIR__ . '/../../views/facturacion/vfact_det.php';
         break;
+        
+    case 'actualizar_estado':
+        // SEGURIDAD: Validar CSRF y datos
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            http_response_code(405);
+            exit;
+        }
+        
+        if (!validate_csrf($_POST['csrf_token'] ?? null)) {
+            $_SESSION['error'] = 'Token CSRF inválido.';
+            header('Location: cfact.php');
+            exit;
+        }
+        
+        $factura_id = (int)($_POST['factura_id'] ?? 0);
+        $estado = $_POST['estado'] ?? '';
+        
+        if (!$factura_id || !in_array($estado, ['pendiente', 'pagada', 'anulada'], true)) {
+            $_SESSION['error'] = 'Datos inválidos.';
+            header('Location: cfact.php');
+            exit;
+        }
+        
+        $stmt = $pdo->prepare('UPDATE facturas SET estado = ? WHERE id = ?');
+        $stmt->execute([$estado, $factura_id]);
+        
+        $_SESSION['success'] = 'Estado de factura actualizado.';
+        header('Location: cfact.php');
+        exit;
+        
     default:
         http_response_code(400);
         echo 'Acción no válida';
