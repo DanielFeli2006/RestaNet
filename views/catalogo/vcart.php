@@ -149,8 +149,8 @@ $total = round($subtotal + $iva, 2);
         </div>
         <div class="card-footer bg-transparent text-center">
           <small class="text-muted">
-            <i class="fa-solid fa-qrcode me-1"></i>
-            Recibirás un código QR al confirmar
+            <i class="fa-solid fa-shield-check me-1"></i>
+            Pago seguro al confirmar tu pedido
           </small>
         </div>
       </div>

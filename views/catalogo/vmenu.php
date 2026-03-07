@@ -38,10 +38,17 @@
   <?php foreach (($productos ?? []) as $p): ?>
     <div class="col-12 col-sm-6 col-lg-4">
       <div class="card h-100 shadow-soft product-card">
-        <!-- Placeholder de imagen -->
-        <div class="card-img-placeholder d-flex align-items-center justify-content-center" style="height: 180px; background: linear-gradient(135deg, #f8f9fa, #e9ecef);">
-          <i class="fa-solid fa-bowl-food fa-3x text-muted opacity-25"></i>
-        </div>
+        <!-- Imagen del producto (actualizado para mostrar imagen real) -->
+        <?php if (!empty($p['imagen'])): ?>
+          <img src="<?php echo BASE_PATH . htmlspecialchars($p['imagen']); ?>" 
+               class="card-img-top" 
+               alt="<?php echo htmlspecialchars($p['nombre']); ?>"
+               style="height: 180px; object-fit: cover;">
+        <?php else: ?>
+          <div class="card-img-placeholder d-flex align-items-center justify-content-center" style="height: 180px; background: linear-gradient(135deg, #f8f9fa, #e9ecef);">
+            <i class="fa-solid fa-bowl-food fa-3x text-muted opacity-25"></i>
+          </div>
+        <?php endif; ?>
         <div class="card-body d-flex flex-column">
           <div class="d-flex align-items-center gap-2 mb-2">
             <span class="badge bg-secondary-subtle text-secondary-emphasis px-2 py-1 small">
