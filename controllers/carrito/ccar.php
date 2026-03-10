@@ -101,8 +101,8 @@ switch ($action) {
             $token_expiracion = date('Y-m-d H:i:s', strtotime('+30 days'));
             
             // Insert factura con token de acceso
-            $stmtF = $pdo->prepare('INSERT INTO facturas (pedido_id, subtotal, impuestos, total, token_acceso, token_expiracion, estado) VALUES (?,?,?,?,?,?,?)');
-            $stmtF->execute([$pedido_id, $subtotal, $impuestos, $total, $token_acceso, $token_expiracion, 'pendiente']);
+            $stmtF = $pdo->prepare('INSERT INTO facturas (pedido_id, subtotal, impuestos, total, token_acceso, token_expira) VALUES (?,?,?,?,?,?)');
+$stmtF->execute([$pedido_id, $subtotal, $impuestos, $total, $token_acceso, $token_expiracion]);
             
             $pdo->commit();
             
