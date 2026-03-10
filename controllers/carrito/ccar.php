@@ -61,15 +61,18 @@ switch ($action) {
         if ($id) cart_add($id, $pdo);
         header('Location: ccar.php');
         exit;
+
     case 'remove':
         $id = (int)($_GET['id'] ?? 0);
         if ($id) cart_remove($id);
         header('Location: ccar.php');
         exit;
+
     case 'clear':
         $_SESSION['cart'] = [];
         header('Location: ccar.php');
         exit;
+
     case 'checkout':
         // SEGURIDAD: Validar mínimo de items
         if (cart_items_count() < 2) {
@@ -77,7 +80,7 @@ switch ($action) {
             header('Location: ccar.php');
             exit;
         }
-        
+
         // Crear pedido y detalle con transacción para integridad
         $pdo->beginTransaction();
         try {
@@ -85,27 +88,27 @@ switch ($action) {
             $stmt = $pdo->prepare('INSERT INTO pedidos (usuario_id, mesa_id, estado) VALUES (?,?,?)');
             $stmt->execute([$_SESSION['id'], $mesa_id, 'pendiente']);
             $pedido_id = (int)$pdo->lastInsertId();
-            
+
             $insDetalle = $pdo->prepare('INSERT INTO detalle_pedido (pedido_id, producto_id, cantidad, precio) VALUES (?,?,?,?)');
             foreach ($_SESSION['cart'] as $pid => $item) {
                 $insDetalle->execute([$pedido_id, $pid, $item['cantidad'], $item['precio']]);
             }
-            
+
             // Calcular totales
             $subtotal = cart_total();
             $impuestos = round($subtotal * 0.19, 2);
             $total = round($subtotal + $impuestos, 2);
-            
+
             // SEGURIDAD: Generar token de acceso seguro (64 caracteres hex)
             $token_acceso = bin2hex(random_bytes(32));
             $token_expiracion = date('Y-m-d H:i:s', strtotime('+30 days'));
-            
+
             // Insert factura con token de acceso
-            $stmtF = $pdo->prepare('INSERT INTO facturas (pedido_id, subtotal, impuestos, total, token_acceso, token_expira) VALUES (?,?,?,?,?,?)');
-$stmtF->execute([$pedido_id, $subtotal, $impuestos, $total, $token_acceso, $token_expiracion]);
-            
+            $stmtF = $pdo->prepare('INSERT INTO facturas (pedido_id, subtotal, impuestos, total, token_acceso, token_expiracion, estado) VALUES (?,?,?,?,?,?,?)');
+            $stmtF->execute([$pedido_id, $subtotal, $impuestos, $total, $token_acceso, $token_expiracion, 'pendiente']);
+
             $pdo->commit();
-            
+
             // Limpiar carrito
             $_SESSION['cart'] = [];
             header('Location: ccar.php?a=done&pedido=' . $pedido_id);
@@ -117,6 +120,7 @@ $stmtF->execute([$pedido_id, $subtotal, $impuestos, $total, $token_acceso, $toke
             header('Location: ccar.php');
             exit;
         }
+
     case 'done':
         $pedido_id = (int)($_GET['pedido'] ?? 0);
         if (!$pedido_id) {
@@ -129,6 +133,7 @@ $stmtF->execute([$pedido_id, $subtotal, $impuestos, $total, $token_acceso, $toke
         $factura = $stmt->fetch(PDO::FETCH_ASSOC);
         include __DIR__ . '/../../views/catalogo/vcart_done.php';
         break;
+
     case 'view':
     default:
         include __DIR__ . '/../../views/catalogo/vcart.php';
