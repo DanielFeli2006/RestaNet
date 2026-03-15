@@ -1,0 +1,32 @@
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Logs and temp
+*.log
+*.tmp
+*.temp
+
+# Local env secrets
+.env
+.env.*
+!.env.example
+
+# Runtime / cache
+cache/
+tmp/
+storage/cache/
+storage/logs/
+
+# Testing / coverage
+coverage/
+.phpunit.result.cache
+
+# Dependency lock for non-library apps is usually committed.
+# Keep composer.lock tracked.
+
+# Keep vendor tracked in this project (already versioned).
+# If you later decide to ignore it, uncomment the next line:
+# vendor/
