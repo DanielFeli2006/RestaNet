@@ -1,0 +1,58 @@
+/* ============================================
+   RESTANET - Dashboard Cards: Flat Colors
+   Añadir al final de css/style.css
+   ============================================ */
+
+/* Colores sólidos sin degradado */
+.bg-solid-warm  { background: #C41E3A !important; }
+.bg-solid-dark  { background: #1F1F1F !important; }
+.bg-solid-warm:hover { background: #A8192F !important; }
+.bg-solid-dark:hover { background: #2A2A2A !important; }
+
+/* ============================================
+   HOVER ICON EFFECT
+   Al pasar el cursor, el texto desaparece
+   y el ícono queda centrado suavemente.
+   ============================================ */
+
+/* El card-body necesita overflow hidden para el clip */
+.card-hover-icon .card-body {
+  overflow: hidden;
+}
+
+/* Bloque de texto que se colapsa en hover */
+.card-hover-icon .card-text-content {
+  max-width: 600px;
+  overflow: hidden;
+  min-width: 0;
+  transition: max-width 0.35s ease, opacity 0.25s ease, margin 0.35s ease;
+  white-space: nowrap;
+}
+.card-hover-icon:hover .card-text-content {
+  max-width: 0;
+  opacity: 0;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+}
+
+/* Flecha que también desaparece */
+.card-hover-icon .card-arrow {
+  flex-shrink: 0;
+  overflow: hidden;
+  max-width: 40px;
+  transition: max-width 0.35s ease, opacity 0.25s ease;
+}
+.card-hover-icon:hover .card-arrow {
+  max-width: 0;
+  opacity: 0;
+}
+
+/* Ícono se centra cuando el texto colapsa */
+.card-hover-icon .card-icon {
+  flex-shrink: 0;
+  transition: margin 0.35s ease;
+}
+.card-hover-icon:hover .card-icon {
+  margin-left: auto !important;
+  margin-right: auto !important;
+}
